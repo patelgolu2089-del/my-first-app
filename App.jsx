@@ -1,25 +1,101 @@
-import React,{useEffect,useState} from "react";
-import {supabase} from "./supabase.js";
-const departments=[["general","General Medicine","🩺"],["pediatrics","Pediatrics","👶"],["orthopedics","Orthopedics","🦴"],["gynecology","Gynecology","🌸"],["cardiology","Cardiology","❤️"],["dermatology","Dermatology","✨"]].map(([id,name,icon])=>({id,name,icon}));
+import React, { useEffect, useState } from "react";
+import { supabase } from "./supabase.js";
+
+const departments = [
+  {id:"general",name:"General Medicine",icon:"🩺"},
+  {id:"pediatrics",name:"Pediatrics",icon:"👶"},
+  {id:"orthopedics",name:"Orthopedics",icon:"🦴"},
+  {id:"gynecology",name:"Gynecology",icon:"🌸"},
+  {id:"cardiology",name:"Cardiology",icon:"❤️"},
+  {id:"dermatology",name:"Dermatology",icon:"✨"}
+];
+
 export default function App(){
- const [view,setView]=useState("home"),[dept,setDept]=useState(departments[0]),[patient,setPatient]=useState({name:"",phone:""}),[token,setToken]=useState(null),[queue,setQueue]=useState([]),[msg,setMsg]=useState(""),[loading,setLoading]=useState(false);
- const [session,setSession]=useState(null),[login,setLogin]=useState({email:"",password:""}),[authError,setAuthError]=useState(""),[authLoading,setAuthLoading]=useState(true);
- useEffect(()=>{if(!supabase){setAuthLoading(false);return;} supabase.auth.getSession().then(({data})=>{setSession(data.session);setAuthLoading(false)}); const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,s)=>setSession(s)); return()=>subscription.unsubscribe()},[]);
- async function signIn(e){e.preventDefault();setAuthError("");const {error}=await supabase.auth.signInWithPassword({email:login.email.trim(),password:login.password});if(error)setAuthError(error.message);else setView("dashboard")}
- async function signOut(){await supabase?.auth.signOut();setView("home")}
- const load=async()=>{if(!supabase)return;const{data}=await supabase.from("queue_tokens").select("*").eq("department",dept.id).order("created_at",{ascending:true});setQueue(data||[])};
- useEffect(()=>{load();if(!supabase)return;const c=supabase.channel("queue-live").on("postgres_changes",{event:"*",schema:"public",table:"queue_tokens"},load).subscribe();return()=>supabase.removeChannel(c)},[dept.id]);
- const serving=queue.find(x=>x.status==="serving"), waiting=queue.filter(x=>x.status==="waiting"), completed=queue.filter(x=>x.status==="completed");
- const position=token?Math.max(0,waiting.findIndex(x=>x.token_number===token.token_number)+1):0;
- async function generate(e){e.preventDefault();setMsg("");if(!patient.name||!patient.phone)return setMsg("Please enter patient name and mobile number.");if(!supabase)return setMsg("Supabase is not configured.");setLoading(true);try{const{data:last}=await supabase.from("queue_tokens").select("token_number").eq("department",dept.id).order("token_number",{ascending:false}).limit(1);const n=(last?.[0]?.token_number||0)+1;const{data,error}=await supabase.from("queue_tokens").insert([{patient_name:patient.name.trim(),phone:patient.phone.trim(),department:dept.id,token_number:n,status:"waiting"}]).select().single();if(error)throw error;setToken(data);await load();setView("token")}catch(e){setMsg(e.message)}finally{setLoading(false)}}
- async function next(){if(!supabase)return;if(serving)await supabase.from("queue_tokens").update({status:"completed"}).eq("id",serving.id);const n=queue.find(x=>x.status==="waiting");if(n)await supabase.from("queue_tokens").update({status:"serving"}).eq("id",n.id);await load()}
- async function done(){if(serving&&supabase){await supabase.from("queue_tokens").update({status:"completed"}).eq("id",serving.id);await load()}}
- const Nav=()=> <header className="topbar"><button className="brand" onClick={()=>setView("home")}><b>+</b> Smart Hospital</button><nav><button onClick={()=>setView("home")}>Patient</button><button onClick={()=>setView("dashboard")}>Staff</button><button onClick={()=>setView("display")}>Display</button></nav></header>;
- return <div className="app"><Nav/><main>
- {view==="home"&&<section className="hero"><div><span className="pill">DIGITAL QUEUE SYSTEM</span><h1>Skip the waiting room.<br/><em>Get your token online.</em></h1><p>Smart Hospital – Naighari. Digital tokens and live queue updates.</p><button className="primary" onClick={()=>setView("departments")}>Get a Token →</button></div><div className="hero-card"><div className="big-plus">+</div><h3>Live Queue</h3><p>Real-time updates</p></div></section>}
- {view==="departments"&&<section className="panel"><button className="back" onClick={()=>setView("home")}>← Back</button><h2>Choose Department</h2><p className="muted">Select a department.</p><div className="grid">{departments.map(d=><button className="dept" key={d.id} onClick={()=>{setDept(d);setView("patient")}}><span>{d.icon}</span><strong>{d.name}</strong><small>Get queue token</small></button>)}</div></section>}
- {view==="patient"&&<section className="panel narrow"><button className="back" onClick={()=>setView("departments")}>← Departments</button><div className="selected">{dept.icon} {dept.name}</div><h2>Patient Details</h2><form onSubmit={generate}><label>Patient name<input value={patient.name} onChange={e=>setPatient({...patient,name:e.target.value})} placeholder="Enter full name"/></label><label>Mobile number<input value={patient.phone} onChange={e=>setPatient({...patient,phone:e.target.value})} placeholder="10-digit mobile number"/></label>{msg&&<div className="error">{msg}</div>}<button className="primary full" disabled={loading}>{loading?"Generating...":"Generate Token"}</button></form></section>}
- {view==="token"&&token&&<section className="panel narrow center"><span className="success">TOKEN GENERATED</span><h2>Your Queue Token</h2><div className="token">{String(token.token_number).padStart(2,"0")}</div><h3>{dept.name}</h3><p className="muted">Patient: {token.patient_name}</p><div className="position"><strong>{position||"—"}</strong><span>people ahead</span></div><button className="secondary full" onClick={load}>↻ Refresh Queue</button></section>}
- {view==="dashboard"&&(!session?<section className="panel narrow"><div className="login-card"><span className="pill">STAFF ONLY</span><h2>Staff Login</h2><p className="muted">Sign in to manage the hospital queue.</p><form onSubmit={signIn}><label>Email<input type="email" required value={login.email} onChange={e=>setLogin({...login,email:e.target.value})} placeholder="staff@hospital.com"/></label><label>Password<input type="password" required value={login.password} onChange={e=>setLogin({...login,password:e.target.value})} placeholder="Your password"/></label>{authError&&<div className="error">{authError}</div>}<button className="primary full">Sign In</button></form></div></section>:<section className="panel"><div className="dash-head"><div><span className="pill">STAFF</span><h2>Queue Dashboard</h2><button className="linkbtn" onClick={signOut}>Sign out</button></div><select value={dept.id} onChange={e=>setDept(departments.find(x=>x.id===e.target.value))}>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div><div className="stats"><div><b>{waiting.length}</b><span>Waiting</span></div><div><b>{serving?1:0}</b><span>Serving</span></div><div><b>{completed.length}</b><span>Completed</span></div></div><div className="now"><small>NOW SERVING</small><strong>{serving?String(serving.token_number).padStart(2,"0"):"—"}</strong><span>{serving?.patient_name||"No patient serving"}</span></div><div className="actions"><button className="primary" onClick={next}>Call Next Patient</button><button className="secondary" onClick={done}>Complete Current</button></div><div className="queue">{queue.map(q=><div className={"queue-row "+q.status} key={q.id}><strong>#{String(q.token_number).padStart(2,"0")}</strong><span>{q.patient_name}</span><small>{q.status}</small></div>)}{!queue.length&&<div className="empty">No patients yet.</div>}</div></section>}
- {view==="display"&&<section className="display-page"><div className="display-head"><b>SMART HOSPITAL – NAIGHARI</b><button onClick={()=>setView("dashboard")}>Staff Dashboard</button></div><select value={dept.id} onChange={e=>setDept(departments.find(x=>x.id===e.target.value))}>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><div className="display-label">NOW SERVING</div><div className="display-token">{serving?String(serving.token_number).padStart(2,"0"):"—"}</div><h2>{dept.name}</h2><div className="next-box"><small>WAITING NEXT</small><b>{waiting.slice(0,5).map(x=>String(x.token_number).padStart(2,"0")).join(" • ")||"No waiting patients"}</b></div></section>}
- </main><footer>Smart Hospital Queue • Naighari</footer></div>}
+  const [view,setView]=useState("home");
+  const [dept,setDept]=useState(departments[0]);
+  const [session,setSession]=useState(null);
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [loginError,setLoginError]=useState("");
+  const [patient,setPatient]=useState({name:"",phone:""});
+  const [token,setToken]=useState(null);
+  const [queue,setQueue]=useState([]);
+  const [message,setMessage]=useState("");
+  const [loading,setLoading]=useState(false);
+
+  useEffect(()=>{
+    let mounted=true;
+    supabase.auth.getSession().then(({data})=>{if(mounted)setSession(data.session)});
+    const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,s)=>setSession(s));
+    return()=>{mounted=false;subscription.unsubscribe()};
+  },[]);
+
+  async function loadQueue(){
+    const {data}=await supabase.from("queue_tokens").select("*").eq("department",dept.id).order("created_at",{ascending:true});
+    setQueue(data||[]);
+  }
+  useEffect(()=>{loadQueue()},[dept.id]);
+
+  const serving=queue.find(x=>x.status==="serving");
+  const waiting=queue.filter(x=>x.status==="waiting");
+  const completed=queue.filter(x=>x.status==="completed");
+
+  async function login(e){
+    e.preventDefault(); setLoginError(""); setLoading(true);
+    const {error}=await supabase.auth.signInWithPassword({email:email.trim(),password});
+    if(error)setLoginError(error.message);
+    else {setPassword("");setView("dashboard")}
+    setLoading(false);
+  }
+  async function logout(){await supabase.auth.signOut();setView("home")}
+
+  async function generateToken(e){
+    e.preventDefault();setMessage("");setLoading(true);
+    const {data:last}=await supabase.from("queue_tokens").select("token_number").eq("department",dept.id).order("token_number",{ascending:false}).limit(1);
+    const next=(last?.[0]?.token_number||0)+1;
+    const {data,error}=await supabase.from("queue_tokens").insert([{
+      patient_name:patient.name.trim(),phone:patient.phone.trim(),department:dept.id,token_number:next,status:"waiting"
+    }]).select().single();
+    if(error)setMessage(error.message);else{setToken(data);setView("token");await loadQueue()}
+    setLoading(false);
+  }
+
+  async function callNext(){
+    if(!session)return;
+    if(serving)await supabase.from("queue_tokens").update({status:"completed"}).eq("id",serving.id);
+    const next=queue.find(x=>x.status==="waiting");
+    if(next)await supabase.from("queue_tokens").update({status:"serving"}).eq("id",next.id);
+    await loadQueue();
+  }
+  async function complete(){
+    if(serving)await supabase.from("queue_tokens").update({status:"completed"}).eq("id",serving.id);
+    await loadQueue();
+  }
+
+  function Header(){
+    return <header className="topbar">
+      <button className="brand" onClick={()=>setView("home")}><span className="logo">+</span>Smart Hospital</button>
+      <nav>
+        <button onClick={()=>setView("home")}>Patient</button>
+        <button onClick={()=>setView(session?"dashboard":"login")}>Staff</button>
+        <button onClick={()=>setView("display")}>Display</button>
+      </nav>
+    </header>
+  }
+
+  return <div className="app"><Header/><main>
+    {view==="home"&&<section className="hero"><div><span className="pill">DIGITAL QUEUE SYSTEM</span><h1>Skip the waiting room.<br/><span>Get your token online.</span></h1><p>Smart Hospital – Naighari digital queue.</p><button className="primary" onClick={()=>setView("departments")}>Get a Token →</button></div></section>}
+
+    {view==="login"&&<section className="panel narrow"><button className="back" onClick={()=>setView("home")}>← Back</button><span className="pill">STAFF ACCESS</span><h2>Staff Login</h2><p className="muted">Sign in to manage the hospital queue.</p><form onSubmit={login}><label>Email<input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="staff@example.com"/></label><label>Password<input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password"/></label>{loginError&&<div className="error">{loginError}</div>}<button className="primary full" disabled={loading}>{loading?"Signing in...":"Sign in"}</button></form></section>}
+
+    {view==="departments"&&<section className="panel"><h2>Choose Department</h2><div className="grid">{departments.map(d=><button className="dept" key={d.id} onClick={()=>{setDept(d);setView("patient")}}><span>{d.icon}</span><strong>{d.name}</strong><small>Get queue token</small></button>)}</div></section>}
+
+    {view==="patient"&&<section className="panel narrow"><button className="back" onClick={()=>setView("departments")}>← Departments</button><h2>Patient Details</h2><form onSubmit={generateToken}><label>Name<input required value={patient.name} onChange={e=>setPatient({...patient,name:e.target.value})}/></label><label>Mobile<input required value={patient.phone} onChange={e=>setPatient({...patient,phone:e.target.value})}/></label>{message&&<div className="error">{message}</div>}<button className="primary full" disabled={loading}>{loading?"Generating...":"Generate Token"}</button></form></section>}
+
+    {view==="token"&&token&&<section className="panel narrow center"><span className="success">TOKEN GENERATED</span><h2>Your Queue Token</h2><div className="token">{String(token.token_number).padStart(2,"0")}</div><h3>{dept.name}</h3><p className="muted">{token.patient_name}</p><button className="secondary full" onClick={loadQueue}>↻ Refresh Queue</button></section>}
+
+    {view==="dashboard"&&session&&<section className="panel"><div className="dash-head"><div><span className="pill">STAFF</span><h2>Queue Dashboard</h2></div><div><select value={dept.id} onChange={e=>setDept(departments.find(d=>d.id===e.target.value))}>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><button className="secondary" onClick={logout}>Sign out</button></div></div><div className="stats"><div><b>{waiting.length}</b><span>Waiting</span></div><div><b>{serving?1:0}</b><span>Serving</span></div><div><b>{completed.length}</b><span>Completed</span></div></div><div className="now"><small>NOW SERVING</small><strong>{serving?String(serving.token_number).padStart(2,"0"):"—"}</strong><span>{serving?.patient_name||"No patient currently serving"}</span></div><div className="actions"><button className="primary" onClick={callNext}>Call Next Patient</button><button className="secondary" onClick={complete}>Complete Current</button></div>{queue.map(q=><div className={"queue-row "+q.status} key={q.id}><strong>#{String(q.token_number).padStart(2,"0")}</strong><span>{q.patient_name}</span><small>{q.status}</small></div>)}</section>}
+
+    {view==="display"&&<section className="display-page"><div className="display-top"><span>SMART HOSPITAL – NAIGHARI</span><button onClick={()=>setView(session?"dashboard":"login")}>{session?"Staff Dashboard":"Staff Login"}</button></div><select value={dept.id} onChange={e=>setDept(departments.find(d=>d.id===e.target.value))}>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><p className="display-label">NOW SERVING</p><div className="display-token">{serving?String(serving.token_number).padStart(2,"0"):"—"}</div><h2>{dept.name}</h2><div className="next-box"><span>WAITING</span><strong>{waiting.slice(0,5).map(q=>String(q.token_number).padStart(2,"0")).join(" • ")||"No waiting patients"}</strong></div></section>}
+  </main><footer>Smart Hospital Queue • Digital patient flow</footer></div>
+}
