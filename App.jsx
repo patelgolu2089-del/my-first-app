@@ -10,7 +10,7 @@ const departments = [
   {id:"dermatology",name:"Dermatology",icon:"✨"}
 ];
 
-function AdminDashboard({onLogout}) {
+function AdminDashboard({onLogout,onManageStaff}) {
   const [rows,setRows]=useState([]);
   useEffect(()=>{
     let live=true;
@@ -24,7 +24,7 @@ function AdminDashboard({onLogout}) {
   return <section className="panel">
     <div className="dash-head">
       <div><span className="pill">ADMIN</span><h2>Admin Dashboard</h2><p className="muted">Hospital-wide queue overview</p></div>
-      <button className="secondary" onClick={()=>setView("staff")}>Manage Staff</button> <button className="secondary" onClick={onLogout}>Sign out</button>
+      <button className="secondary" onClick={onManageStaff}>Manage Staff</button> <button className="secondary" onClick={onLogout}>Sign out</button>
     </div>
     <div className="admin-grid">
       {departments.map(d=>{
@@ -49,7 +49,7 @@ function StaffManagement({onBack}){
  React.useEffect(()=>{load()},[]);
  async function save(e){e.preventDefault();setMsg("");const {error}=await supabase.from("staff_profiles").upsert({user_id:form.user_id.trim(),full_name:form.full_name.trim(),role:"staff",department:form.department||null,active:true});if(error)setMsg(error.message);else{setMsg("Staff saved successfully.");setForm({user_id:"",full_name:"",department:""});load()}}
  async function toggle(s){const {error}=await supabase.from("staff_profiles").update({active:!s.active}).eq("user_id",s.user_id);if(error)setMsg(error.message);else load()}
- return <section className="panel"><button className="back" onClick={onBack}>← Admin Dashboard</button><span className="pill">STAFF MANAGEMENT</span><h2>Manage Staff</h2><p className="muted">Create the user first in Supabase Authentication → Users, then paste that user's UUID below.</p><form className="staff-form" onSubmit={save}><label>User UUID<input required value={form.user_id} onChange={e=>setForm({...form,user_id:e.target.value})}/></label><label>Full name<input required value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})}/></label><label>Department<select required value={form.department} onChange={e=>setForm({...form,department:e.target.value})}><option value="">Select</option>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label><button className="primary" type="submit">Add / Update Staff</button></form>{msg&&<div className="error">{msg}</div>}<div className="staff-list">{staff.map(s=><div className="staff-row" key={s.user_id}><div><strong>{s.full_name}</strong><small>{s.department||"All"} • {s.active?"Active":"Inactive"}</small></div><button className="secondary" onClick={()=>toggle(s)}>{s.active?"Deactivate":"Activate"}</button></div>)}</div></section>
+ return <section className="panel"><button className="back" onClick={onBack}>← Admin Dashboard</button><span className="pill">STAFF MANAGEMENT</span><h2>Manage Staff</h2><p className="muted">Create the user first in Supabase Authentication → Users, then paste that user's UUID below.</p><form className="staff-form" onSubmit={save}><label>User UUID<input required value={form.user_id} onChange={e=>setForm({...form,user_id:e.target.value})}/></label><label>Full name<input required value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})}/></label><label>Department<select required value={form.department} onChange={e=>setForm({...form,department:e.target.value})}><option value="">Select</option>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label><button className="primary" type="submit">Add / Update Staff</button></form>{msg&&<div className={msg.includes("successfully")?"success":"error"}>{msg}</div>}<div className="staff-list">{staff.map(s=><div className="staff-row" key={s.user_id}><div><strong>{s.full_name}</strong><small>{s.department||"All"} • {s.active?"Active":"Inactive"}</small></div><button className="secondary" onClick={()=>toggle(s)}>{s.active?"Deactivate":"Activate"}</button></div>)}</div></section>
 }
 export default function App(){
   const [view,setView]=useState("home");
@@ -160,7 +160,8 @@ export default function App(){
         {queue.map(q=><div className={"queue-row "+q.status} key={q.id}><strong>#{String(q.token_number).padStart(2,"0")}</strong><span>{q.patient_name}</span><small>{q.status}</small></div>)}
       </section>}
 
-      {view==="admin" && session && <AdminDashboard onLogout={logout}/>}
+      {view==="admin" && session && <AdminDashboard onLogout={logout} onManageStaff={()=>setView("staff")}/>} 
+      {view==="staff" && session && <StaffManagement onBack={()=>setView("admin")}/>}
 
       {view==="display" && <section className="display-page"><div className="display-top"><span>SMART HOSPITAL – NAIGHARI</span><button onClick={()=>setView(session?"dashboard":"login")}>{session?"Staff Dashboard":"Staff Login"}</button></div><select value={dept.id} onChange={e=>setDept(departments.find(d=>d.id===e.target.value))}>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><p className="display-label">NOW SERVING</p><div className="display-token">{serving?String(serving.token_number).padStart(2,"0"):"—"}</div><h2>{dept.name}</h2><div className="next-box"><span>WAITING</span><strong>{waiting.slice(0,5).map(q=>String(q.token_number).padStart(2,"0")).join(" • ")||"No waiting patients"}</strong></div></section>}
     </main>
