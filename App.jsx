@@ -24,7 +24,7 @@ function AdminDashboard({onLogout}) {
   return <section className="panel">
     <div className="dash-head">
       <div><span className="pill">ADMIN</span><h2>Admin Dashboard</h2><p className="muted">Hospital-wide queue overview</p></div>
-      <button className="secondary" onClick={onLogout}>Sign out</button>
+      <button className="secondary" onClick={()=>setView("staff")}>Manage Staff</button> <button className="secondary" onClick={onLogout}>Sign out</button>
     </div>
     <div className="admin-grid">
       {departments.map(d=>{
@@ -42,6 +42,15 @@ function AdminDashboard({onLogout}) {
   </section>;
 }
 
+
+function StaffManagement({onBack}){
+ const [staff,setStaff]=React.useState([]),[msg,setMsg]=React.useState(""),[form,setForm]=React.useState({user_id:"",full_name:"",department:""});
+ async function load(){const {data,error}=await supabase.from("staff_profiles").select("user_id,full_name,role,department,active").order("created_at",{ascending:false});setStaff(data||[]);if(error)setMsg(error.message)}
+ React.useEffect(()=>{load()},[]);
+ async function save(e){e.preventDefault();setMsg("");const {error}=await supabase.from("staff_profiles").upsert({user_id:form.user_id.trim(),full_name:form.full_name.trim(),role:"staff",department:form.department||null,active:true});if(error)setMsg(error.message);else{setMsg("Staff saved successfully.");setForm({user_id:"",full_name:"",department:""});load()}}
+ async function toggle(s){const {error}=await supabase.from("staff_profiles").update({active:!s.active}).eq("user_id",s.user_id);if(error)setMsg(error.message);else load()}
+ return <section className="panel"><button className="back" onClick={onBack}>← Admin Dashboard</button><span className="pill">STAFF MANAGEMENT</span><h2>Manage Staff</h2><p className="muted">Create the user first in Supabase Authentication → Users, then paste that user's UUID below.</p><form className="staff-form" onSubmit={save}><label>User UUID<input required value={form.user_id} onChange={e=>setForm({...form,user_id:e.target.value})}/></label><label>Full name<input required value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})}/></label><label>Department<select required value={form.department} onChange={e=>setForm({...form,department:e.target.value})}><option value="">Select</option>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label><button className="primary" type="submit">Add / Update Staff</button></form>{msg&&<div className="error">{msg}</div>}<div className="staff-list">{staff.map(s=><div className="staff-row" key={s.user_id}><div><strong>{s.full_name}</strong><small>{s.department||"All"} • {s.active?"Active":"Inactive"}</small></div><button className="secondary" onClick={()=>toggle(s)}>{s.active?"Deactivate":"Activate"}</button></div>)}</div></section>
+}
 export default function App(){
   const [view,setView]=useState("home");
   const [dept,setDept]=useState(departments[0]);
