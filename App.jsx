@@ -10,6 +10,40 @@ const departments = [
   {id:"dermatology",name:"Dermatology",icon:"✨"}
 ];
 
+
+function AdminDashboard({onLogout}){
+ const [rows,setRows]=React.useState([]);
+ React.useEffect(()=>{
+   async function load(){
+     const {data}=await supabase.from("queue_tokens").select("*").order("created_at",{ascending:false}).limit(500);
+     setRows(data||[]);
+   }
+   load();
+ },[]);
+ const cards=departments.map(d=>{
+   const r=rows.filter(x=>x.department===d.id);
+   return {...d,waiting:r.filter(x=>x.status==="waiting").length,
+     serving:r.filter(x=>x.status==="serving").length,
+     completed:r.filter(x=>x.status==="completed").length};
+ });
+ return <section className="panel">
+   <div className="dash-head">
+     <div><span className="pill">ADMIN</span><h2>Admin Dashboard</h2><p className="muted">Hospital-wide queue overview</p></div>
+     <button className="secondary" onClick={onLogout}>Sign out</button>
+   </div>
+   <div className="admin-grid">
+    {cards.map(d=><div className="admin-card" key={d.id}>
+      <div className="admin-title"><span>{d.icon}</span><strong>{d.name}</strong></div>
+      <div className="admin-counts">
+       <span><b>{d.waiting}</b>Waiting</span>
+       <span><b>{d.serving}</b>Serving</span>
+       <span><b>{d.completed}</b>Done</span>
+      </div>
+    </div>)}
+   </div>
+ </section>
+}
+
 export default function App(){
   const [view,setView]=useState("home");
   const [dept,setDept]=useState(departments[0]);
@@ -44,7 +78,7 @@ export default function App(){
     e.preventDefault(); setLoginError(""); setLoading(true);
     const {error}=await supabase.auth.signInWithPassword({email:email.trim(),password});
     if(error)setLoginError(error.message);
-    else {setPassword("");setView("dashboard")}
+    else {setPassword("");setView(loginMode==="admin"?"admin":"dashboard")}
     setLoading(false);
   }
   async function logout(){await supabase.auth.signOut();setView("home")}
@@ -78,7 +112,7 @@ export default function App(){
       <nav>
         <button onClick={()=>setView("home")}>Patient</button>
         <button onClick={()=>setView(session?"dashboard":"login")}>Staff</button>
-        <button onClick={()=>setView("display")}>Display</button>
+        <button onClick={()=>setView("display")}>Display</button><button onClick={()=>{setLoginMode("admin");setView("login")}}>Admin</button>
       </nav>
     </header>
   }
@@ -96,6 +130,6 @@ export default function App(){
 
     {view==="dashboard"&&session&&<section className="panel"><div className="dash-head"><div><span className="pill">STAFF</span><h2>Queue Dashboard</h2></div><div><select value={dept.id} onChange={e=>setDept(departments.find(d=>d.id===e.target.value))}>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><button className="secondary" onClick={logout}>Sign out</button></div></div><div className="stats"><div><b>{waiting.length}</b><span>Waiting</span></div><div><b>{serving?1:0}</b><span>Serving</span></div><div><b>{completed.length}</b><span>Completed</span></div></div><div className="now"><small>NOW SERVING</small><strong>{serving?String(serving.token_number).padStart(2,"0"):"—"}</strong><span>{serving?.patient_name||"No patient currently serving"}</span></div><div className="actions"><button className="primary" onClick={callNext}>Call Next Patient</button><button className="secondary" onClick={complete}>Complete Current</button></div>{queue.map(q=><div className={"queue-row "+q.status} key={q.id}><strong>#{String(q.token_number).padStart(2,"0")}</strong><span>{q.patient_name}</span><small>{q.status}</small></div>)}</section>}
 
-    {view==="display"&&<section className="display-page"><div className="display-top"><span>SMART HOSPITAL – NAIGHARI</span><button onClick={()=>setView(session?"dashboard":"login")}>{session?"Staff Dashboard":"Staff Login"}</button></div><select value={dept.id} onChange={e=>setDept(departments.find(d=>d.id===e.target.value))}>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><p className="display-label">NOW SERVING</p><div className="display-token">{serving?String(serving.token_number).padStart(2,"0"):"—"}</div><h2>{dept.name}</h2><div className="next-box"><span>WAITING</span><strong>{waiting.slice(0,5).map(q=>String(q.token_number).padStart(2,"0")).join(" • ")||"No waiting patients"}</strong></div></section>}
+    {view==="admin"&&session&&<AdminDashboard onLogout={logout}/>}{view==="display"&&<section className="display-page"><div className="display-top"><span>SMART HOSPITAL – NAIGHARI</span><button onClick={()=>setView(session?"dashboard":"login")}>{session?"Staff Dashboard":"Staff Login"}</button></div><select value={dept.id} onChange={e=>setDept(departments.find(d=>d.id===e.target.value))}>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><p className="display-label">NOW SERVING</p><div className="display-token">{serving?String(serving.token_number).padStart(2,"0"):"—"}</div><h2>{dept.name}</h2><div className="next-box"><span>WAITING</span><strong>{waiting.slice(0,5).map(q=>String(q.token_number).padStart(2,"0")).join(" • ")||"No waiting patients"}</strong></div></section>}
   </main><footer>Smart Hospital Queue • Digital patient flow</footer></div>
 }
